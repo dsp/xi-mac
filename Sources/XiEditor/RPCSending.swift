@@ -85,6 +85,27 @@ protocol RPCSending {
     func sendRpc(_ method: String, params: Any) -> RpcResult
 }
 
+class XiLibRPCSender {
+    private var hnd: UnsafeMutablePointer<XiHandle>?
+
+    init() {
+        // We have to push "self"
+        let mySelf = UnsafeRawPointer(Unmanaged.passUnretained(self).toOpaque())
+        self.hnd = xi_create({ msg, len, user_data in
+            if let json = msg, let mySelfOpaque = user_data {
+                let mySelf = Unmanaged<XiLibRPCSender>
+                    .fromOpaque(mySelfOpaque)
+                    .takeUnretainedValue()
+                mySelf.callback(msg: String(cString: json))
+            }
+        }, mySelf)
+    }
+    
+    func callback(msg: String) {
+        print(msg);
+    }
+}
+
 class StdoutRPCSender: RPCSending {
 
     private let task = Process()

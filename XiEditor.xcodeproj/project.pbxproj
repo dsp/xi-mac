@@ -31,6 +31,7 @@
 		6BF9575B1FD70C420010BAE6 /* Client.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BF9575A1FD70C420010BAE6 /* Client.swift */; };
 		832910D920229C2D0042C32B /* Fps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 832910D820229C2D0042C32B /* Fps.swift */; };
 		95368BAB21D0B466000FAC40 /* Annotation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95368BAA21D0B466000FAC40 /* Annotation.swift */; };
+		84C8C1E221DC176C00126BFA /* libxilib.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 84C8C1E121DC176C00126BFA /* libxilib.dylib */; };
 		95FD9935218689A500C32AF1 /* MarkerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FD9934218689A500C32AF1 /* MarkerBar.swift */; };
 		AE0243F61E4BDF8A00641BDA /* StyleMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE0243F51E4BDF8A00641BDA /* StyleMap.swift */; };
 		AE041BA61D4327EB0069AB8B /* plugins in Resources */ = {isa = PBXBuildFile; fileRef = AE041BA51D4327EB0069AB8B /* plugins */; };
@@ -156,6 +157,9 @@
 		6BF9575A1FD70C420010BAE6 /* Client.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Client.swift; sourceTree = "<group>"; };
 		832910D820229C2D0042C32B /* Fps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fps.swift; sourceTree = "<group>"; };
 		95368BAA21D0B466000FAC40 /* Annotation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Annotation.swift; sourceTree = "<group>"; };
+		84C8C1E121DC176C00126BFA /* libxilib.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libxilib.dylib; path = "../xi-lib/target/debug/libxilib.dylib"; sourceTree = "<group>"; };
+		84C8C1E721DC1B7100126BFA /* XiEditor-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "XiEditor-Bridging-Header.h"; sourceTree = "<group>"; };
+		84C8C1EC21DC875400126BFA /* xilib.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = xilib.h; path = "../../xi-lib/headers/xilib.h"; sourceTree = "<group>"; };
 		95FD9934218689A500C32AF1 /* MarkerBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkerBar.swift; sourceTree = "<group>"; };
 		AE0243F51E4BDF8A00641BDA /* StyleMap.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = StyleMap.swift; sourceTree = "<group>"; };
 		AE041B971D4323460069AB8B /* build-rust-xcode.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = "build-rust-xcode.sh"; sourceTree = "<group>"; };
@@ -231,6 +235,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				84C8C1E221DC176C00126BFA /* libxilib.dylib in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -254,6 +259,7 @@
 		0C4460AC218955400035E3C1 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				84C8C1EC21DC875400126BFA /* xilib.h */,
 				AE499DCE1C82BB2B002D68AF /* XiEditor */,
 				0C66CB2C218F5CDB00F6F899 /* XiCli */,
 				0C62058E21B63B8E00A9758F /* XiCliCore */,
@@ -308,6 +314,14 @@
 			path = Resources;
 			sourceTree = SOURCE_ROOT;
 		};
+		84C8C1E021DC176C00126BFA /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				84C8C1E121DC176C00126BFA /* libxilib.dylib */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		AE499DC31C82BB2B002D68AF = {
 			isa = PBXGroup;
 			children = (
@@ -317,6 +331,7 @@
 				31D2A51321B6BEEC005919F0 /* Resources */,
 				D023DA021CD071B40087EC0A /* xicore */,
 				AE499DCD1C82BB2B002D68AF /* Products */,
+				84C8C1E021DC176C00126BFA /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -370,6 +385,7 @@
 				D810EA5121BB291D00EABB21 /* ClientImplementation.swift */,
 				95FD9934218689A500C32AF1 /* MarkerBar.swift */,
 				95368BAA21D0B466000FAC40 /* Annotation.swift */,
+				84C8C1E721DC1B7100126BFA /* XiEditor-Bridging-Header.h */,
 			);
 			path = XiEditor;
 			sourceTree = "<group>";
@@ -584,7 +600,7 @@
 					};
 					AE499DCB1C82BB2B002D68AF = {
 						CreatedOnToolsVersion = 7.2;
-						LastSwiftMigration = 0900;
+						LastSwiftMigration = 1010;
 					};
 					AE499DDA1C82BB2B002D68AF = {
 						CreatedOnToolsVersion = 7.2;
@@ -1033,12 +1049,16 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon-Debug";
+				CLANG_ENABLE_MODULES = YES;
 				COMBINE_HIDPI_IMAGES = YES;
 				INFOPLIST_FILE = "$(SRCROOT)/Sources/XiEditor/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				OTHER_LDFLAGS = "-L/Users/davidsp/src/xi-lib/target/debug";
 				OTHER_SWIFT_FLAGS = "-D DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = "io.xi-editor.XiEditor.Editor";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "Sources/XiEditor/XiEditor-Bridging-Header.h";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 4.0;
 			};
 			name = Debug;
@@ -1047,11 +1067,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ENABLE_MODULES = YES;
 				COMBINE_HIDPI_IMAGES = YES;
 				INFOPLIST_FILE = "$(SRCROOT)/Sources/XiEditor/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				OTHER_LDFLAGS = "-L/Users/davidsp/src/xi-lib/target/debug";
 				PRODUCT_BUNDLE_IDENTIFIER = "io.xi-editor.XiEditor.Editor";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "Sources/XiEditor/XiEditor-Bridging-Header.h";
 				SWIFT_VERSION = 4.0;
 			};
 			name = Release;

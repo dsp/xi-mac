@@ -109,7 +109,7 @@ fileprivate class LineCacheState<T>: UnfairLock {
     /// Updates the state by applying a delta. The update format is detailed in the
     /// [xi-core docs](http://xi-editor.github.io/xi-editor/docs/frontend-protocol.html#view-update-protocol).
     func applyUpdate(update: [String: AnyObject]) -> InvalSet {
-        annotations = AnnotationStore(from: (update["annotations"] as! [[String: AnyObject]]))
+        annotations = AnnotationStore(from: (update["annotations"] as! [[String: AnyObject]])   )
 
         let inval = InvalSet()
         guard let ops = update["ops"] else { return inval }
