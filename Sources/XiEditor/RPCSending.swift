@@ -85,25 +85,267 @@ protocol RPCSending {
     func sendRpc(_ method: String, params: Any) -> RpcResult
 }
 
-class XiLibRPCSender {
-    private var hnd: UnsafeMutablePointer<XiHandle>?
+class XiLibReceiver: Thread {
+    private var xiHandler: UnsafeMutablePointer<XiHandle>?
+    init (xiHandler: UnsafeMutablePointer<XiHandle>?) {
+        self.xiHandler = xiHandler
+    }
 
-    init() {
+    override func main() {
+        print("start receiver")
+        xi_start_receiver(self.xiHandler)
+    }
+}
+
+class XiLibThread: Thread, RPCSending {
+
+    private var client: XiClient
+    private var rpcIndex = 0
+    private var xiHandler: UnsafeMutablePointer<XiHandle>?
+    private var queue = DispatchQueue(label: "io.xi-editor.XiEditor.CoreConnection", attributes: [])
+    private var pending = Dictionary<Int, RpcCallback>()
+    private var receiver: XiLibReceiver?
+
+    init(client : XiClient) {
+        
+        self.client = client
+        super.init()
         // We have to push "self"
         let mySelf = UnsafeRawPointer(Unmanaged.passUnretained(self).toOpaque())
-        self.hnd = xi_create({ msg, len, user_data in
-            if let json = msg, let mySelfOpaque = user_data {
-                let mySelf = Unmanaged<XiLibRPCSender>
-                    .fromOpaque(mySelfOpaque)
-                    .takeUnretainedValue()
-                mySelf.callback(msg: String(cString: json))
+        self.xiHandler = xi_create(
+            // This callback is called by xi-lib to notify us of
+            // responses or notifications.
+            { msgPtr, len, user_data in
+            if let jsonPtr = msgPtr, let mySelfOpaque = user_data {
+                let mySelf = Unmanaged<XiLibThread>
+                    .fromOpaque(mySelfOpaque).takeUnretainedValue()
+                mySelf.callback(data: Data(bytes: jsonPtr, count: Int(len)))
             }
         }, mySelf)
+        self.receiver = XiLibReceiver(xiHandler: self.xiHandler)
     }
     
-    func callback(msg: String) {
-        print(msg);
+    deinit {
+        self.receiver!.cancel()
+        xi_free(self.xiHandler)
     }
+
+    override func main() {
+        // TOOD: start receiver thread
+        print("starting receiver")
+        self.receiver!.start()
+        print("starting core")
+        xi_start_core(self.xiHandler)
+    }
+    
+    func callback(data: Data) {
+        do {
+            let json = try JSONSerialization.jsonObject(with: data, options: .allowFragments)
+            handleRpc(json)
+        } catch let error as NSError {
+            print("json error \(error.userInfo)")
+        }
+    }
+
+    private func handleRpc(_ json: Any) {
+        guard let obj = json as? [String: AnyObject] else { fatalError("malformed json \(json)") }
+        if let index = obj["id"] as? Int {
+            if obj["result"] != nil || obj["error"] != nil {
+                var callback: RpcCallback?
+                queue.sync {
+                    callback = self.pending.removeValue(forKey: index)
+                }
+                if let result = obj["result"] {
+                    callback?(.ok(result))
+                } else if let errJson = obj["error"] as? [String: AnyObject],
+                    let err = RemoteError(json: errJson) {
+                    callback?(.error(err))
+                } else {
+                    print("failed to parse response \(obj)")
+                }
+            } else {
+                self.handleRequest(json: obj)
+            }
+        } else {
+            self.handleNotification(json: obj)
+        }
+    }
+
+    private func handleRequest(json: [String: AnyObject]) {
+        guard let jsonMethod = json["method"] as? String,
+            let params = json["params"],
+            let id = json["id"],
+            let method = RPCRequestMethod(rawValue: jsonMethod)
+            else {
+                assertionFailure("unknown json from core: \(json)")
+                return
+        }
+        
+        switch method {
+        case .measureWidth:
+            guard let args = params as? [[String: AnyObject]]
+                else {
+                    assertionFailure("unexpected data from core: \(params)")
+                    return
+            }
+            let result = self.client.measureWidth(args: args)
+            sendResult(id: id, result: result)
+        }
+    }
+    
+    private func sendResult(id: Any, result: Any) {
+        let json = ["id": id, "result": result]
+        sendJson(json)
+    }
+    
+    private func handleNotification(json: [String: AnyObject]) {
+        guard let jsonMethod = json["method"] as? String,
+            let params = json["params"],
+            let method = RPCNotificationMethod(rawValue: jsonMethod)
+            else {
+                assertionFailure("unknown json from core: \(json)")
+                return
+        }
+        
+        let viewIdentifier = params["view_id"] as? ViewIdentifier
+        
+        switch method {
+        case .update:
+            let update = params["update"] as! [String: AnyObject]
+            self.client.update(viewIdentifier: viewIdentifier!, update: update, rev: nil)
+            
+        case .scrollTo:
+            let line = params["line"] as! Int
+            let col = params["col"] as! Int
+            self.client.scroll(viewIdentifier: viewIdentifier!, line: line, column: col)
+            
+        case .defStyle:
+            self.client.defineStyle(style: params as! [String: AnyObject])
+            
+        case .pluginStarted:
+            let plugin = params["plugin"] as! String
+            self.client.pluginStarted(viewIdentifier: viewIdentifier!, pluginName: plugin)
+            
+        case .pluginStopped:
+            let plugin = params["plugin"] as! String
+            self.client.pluginStopped(viewIdentifier: viewIdentifier!, pluginName: plugin)
+            
+        case .availableThemes:
+            let themes = params["themes"] as! [String]
+            self.client.availableThemes(themes: themes)
+            
+        case .themeChanged:
+            let name = params["name"] as! String
+            let themeJson = params["theme"] as! [String: AnyObject]
+            let theme = Theme(jsonObject: themeJson)
+            self.client.themeChanged(name: name, theme: theme)
+            
+        case .languageChanged:
+            let languageIdentifier = params["language_id"] as! String
+            self.client.languageChanged(
+                viewIdentifier: viewIdentifier!,
+                languageIdentifier: languageIdentifier
+            )
+            
+        case .availablePlugins:
+            let plugins = params["plugins"] as! [[String: AnyObject]]
+            self.client.availablePlugins(viewIdentifier: viewIdentifier!, plugins: plugins)
+            
+        case .availableLanguages:
+            let languages = params["languages"] as! [String]
+            self.client.availableLanguages(languages: languages)
+            
+        case .updateCommands:
+            let plugin = params["plugin"] as! String
+            let cmdsJson = params["cmds"] as! [[String: AnyObject]]
+            let cmds = cmdsJson.map { Command(jsonObject: $0) }
+                .filter { $0 != nil }
+                .map { $0! }
+            
+            self.client.updateCommands(viewIdentifier: viewIdentifier!,
+                                   plugin: plugin, commands: cmds)
+            
+        case .configurationChanged:
+            let changes = params["changes"] as! [String: AnyObject]
+            self.client.configChanged(viewIdentifier: viewIdentifier!, changes: changes)
+            
+        case .alert:
+            let message = params["msg"] as! String
+            self.client.alert(text: message)
+            
+        case .addStatusItem:
+            let source = params["source"] as! String
+            let key = params["key"] as! String
+            let value = params["value"] as! String
+            let alignment = params["alignment"] as! String
+            self.client.addStatusItem(viewIdentifier: viewIdentifier!, source: source, key: key, value: value, alignment: alignment)
+            
+        case .updateStatusItem:
+            let key = params["key"] as! String
+            let value = params["value"] as! String
+            self.client.updateStatusItem(viewIdentifier: viewIdentifier!, key: key, value: value)
+            
+        case .removeStatusItem:
+            let key = params["key"] as! String
+            self.client.removeStatusItem(viewIdentifier: viewIdentifier!, key: key)
+            
+        case .showHover:
+            let requestIdentifier = params["request_id"] as! Int
+            let result = params["result"] as! String
+            self.client.showHover(viewIdentifier: viewIdentifier!, requestIdentifier: requestIdentifier, result: result)
+            
+        case .findStatus:
+            let status = params["queries"] as! [[String: AnyObject]]
+            self.client.findStatus(viewIdentifier: viewIdentifier!, status: status)
+            
+        case .replaceStatus:
+            let status = params["status"] as! [String: AnyObject]
+            self.client.replaceStatus(viewIdentifier: viewIdentifier!, status: status)
+        }
+    }
+
+    func sendRpcAsync(_ method: String, params: Any, callback: RpcCallback?) {
+        var req = ["method": method, "params": params] as [String : Any]
+        if let callback = callback {
+            queue.sync {
+                let index = self.rpcIndex
+                req["id"] = index
+                self.rpcIndex += 1
+                self.pending[index] = callback
+            }
+        }
+        print(req)
+        sendJson(req)
+    }
+    
+   
+    func sendRpc(_ method: String, params: Any) -> RpcResult {
+        let semaphore = DispatchSemaphore(value: 0)
+        var result: RpcResult? = nil
+        
+        sendRpcAsync(method, params: params) { (r) in
+            result = r
+            semaphore.signal()
+        }
+        let _ = semaphore.wait(timeout: .distantFuture)
+        return result!
+    }
+    
+    func sendJson(_ json: Any) {
+        do {
+            let data = try JSONSerialization.data(withJSONObject: json, options: [])
+            let mutdata = NSMutableData()
+            mutdata.append(data)
+            mutdata.append([0x0a as UInt8], length: 1)
+            // I wonder if there is a better way to get an UnsafePointer<Int8> from a NSMutableData
+            (mutdata as Data).withUnsafeBytes({ (ptr : UnsafePointer<Int8>) -> Void in
+                xi_send_message(self.xiHandler, ptr, UInt32(truncatingIfNeeded: mutdata.length))
+            })
+        } catch _ {
+            print("error serializing to json")
+        }
+    }
+
 }
 
 class StdoutRPCSender: RPCSending {
@@ -242,6 +484,9 @@ class StdoutRPCSender: RPCSending {
 
     private func handleRaw(_ data: Data) {
         Trace.shared.trace("handleRaw", .rpc, .begin)
+        if let d = String(data: data, encoding: .utf8) {
+            print(d)
+        }
         do {
             let json = try JSONSerialization.jsonObject(with: data, options: .allowFragments)
             handleRpc(json)
